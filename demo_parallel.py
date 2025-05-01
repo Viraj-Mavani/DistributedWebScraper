@@ -58,4 +58,4 @@ def main():
 if __name__ == '__main__':
     main()
 
-# run with "mpiexec -n 4 python parallel_demo.py"
+# run with "mpiexec -n 4 python demo_parallel.py"

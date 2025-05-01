@@ -40,4 +40,4 @@ def main():
 if __name__ == '__main__':
     main()
 
-# run with "python serial_demo.py"
+# run with "python demo_serial.py"
