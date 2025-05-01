@@ -1,3 +1,4 @@
+# serial_main.py
 import logging
 import csv
 from scraper.core import scrape_trending
@@ -16,29 +17,19 @@ def main():
         'https://github.com/trending/python?since=weekly',
     ]
 
+    flat = []
     for url in urls:
         metrics.incr('urls_total')
         logger.info(f"Fetching {url}")
-        with metrics.time_block():
-            try:
-                items = scrape_trending(url)
-                metrics.incr('urls_success')
-            except Exception as e:
-                metrics.incr('urls_failed')
-                logger.warning(f"Error fetching {url}: {e}")
-                continue
-
-            # append results
+        try:
+            items = scrape_trending(url, max_retries=3, metrics=metrics)
+            metrics.incr('urls_success')
             for pos, repo in items:
-                metrics  # no-op, just keep consistent
-            # you could also collect the rows here if you want per-URL CSV shards
-
-    # flatten and write a single CSV
-    # (for serial it's just one list of rows)
-    flat = []
-    for url in urls:
-        for pos, repo in scrape_trending(url):
-            flat.append({'url': url, 'position': pos, 'repo': repo})
+                flat.append({'url': url, 'position': pos, 'repo': repo})
+        except Exception as e:
+            metrics.incr('urls_failed')
+            logger.warning(f"Error fetching {url} after retries: {e}")
+            continue
 
     out_path = 'data/output/trending_serial.csv'
     with open(out_path, 'w', newline='', encoding='utf-8') as f:
@@ -47,7 +38,6 @@ def main():
         writer.writerows(flat)
     logger.info(f"Wrote {len(flat)} rows to {out_path}")
 
-    # dump metrics
     metrics_path = 'metrics/serial_metrics.json'
     save_report(metrics.report(), metrics_path)
     logger.info(f"Serial run metrics saved to {metrics_path}")
