@@ -13,23 +13,18 @@ from scraper.scheduler import (
     merge_reports,
     save_report,
 )
+from scraper.urlgen import generate_trending_urls
+
+# filters:
+LANGUAGES = ['Python', 'JavaScript', 'Java', 'C', 'Go']
+PERIODS = ['daily', 'weekly', 'monthly']
 
 # Paths
 CP_PATH = 'data/output/checkpoint.json'
 OUT_CSV = 'data/output/trending_parallel.csv'
 
 # Full list of endpoints
-ALL_URLS = [
-    'https://github.com/trending?since=daily',
-    'https://github.com/trending?since=weekly',
-    'https://github.com/trending?since=monthly',
-    'https://github.com/trending/python?since=daily',
-    'https://github.com/trending/python?since=weekly',
-    'https://github.com/trending/python?since=monthly',
-    'https://github.com/trending/javascript?since=daily',
-    'https://github.com/trending/javascript?since=weekly',
-    'https://github.com/trending/javascript?since=monthly',
-]
+ALL_URLS = generate_trending_urls(LANGUAGES, PERIODS)
 
 def master(comm, size):
     logger = setup(False)
