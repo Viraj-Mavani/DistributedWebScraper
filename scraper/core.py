@@ -1,52 +1,100 @@
+# scraper/core.py
+
 import time
 import requests
 from bs4 import BeautifulSoup
-from typing import Optional, List, Tuple
-from scraper.metrics import Metrics
 
-
-def scrape_trending(
-    url: str,
-    max_retries: int = 3,
-    metrics: Optional[Metrics] = None
-) -> List[Tuple[int, str]]:
+def scrape_trending(url: str, max_retries: int = 3, metrics=None) -> str:
     """
-    Fetch and parse a GitHub Trending page with retry and timing support.
+    Fetch the raw HTML of a GitHub Trending page, with retry logic.
+    Returns the page HTML as text.
 
-    :param url: The full GitHub Trending URL to scrape.
-    :param max_retries: Number of attempts before giving up.
-    :param metrics: Optional Metrics instance; if provided,
-                    'retries' counter and per-URL timing will be recorded.
-    :return: List of tuples (position, full_repo_name).
-    :raises: Last exception if all retries fail.
+    :param url: the Trending page URL
+    :param max_retries: how many times to retry on failure
+    :param metrics: optional Metrics object to record retries
     """
-    for attempt in range(1, max_retries + 1):
-        if attempt > 1 and metrics is not None:
-            metrics.incr('retries')
+    attempt = 0
+    while True:
         try:
-            # Time the fetch+parse if metrics provided
-            if metrics is not None:
-                with metrics.time_block():
-                    resp = requests.get(url, timeout=10)
-                    resp.raise_for_status()
-                    html = resp.text
-            else:
-                resp = requests.get(url, timeout=10)
-                resp.raise_for_status()
-                html = resp.text
-
-            soup = BeautifulSoup(html, 'html.parser')
-            cards = soup.select('article.Box-row')
-            result: List[Tuple[int, str]] = []
-            for idx, card in enumerate(cards, start=1):
-                name = card.select_one('h2 a').get_text(strip=True).replace(' / ', '/')
-                result.append((idx, name))
-            return result
-
-        except Exception:
-            # On final attempt, propagate exception
-            if attempt == max_retries:
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
+            return resp.text
+        except Exception as e:
+            attempt += 1
+            if metrics:
+                metrics.incr('retries')
+            if attempt >= max_retries:
+                # let the caller handle/log the exception
                 raise
-            # Otherwise, retry
-    # Should never reach here
-    return []
+            # small back-off before retrying
+            time.sleep(1)
+
+
+def parse_trending_cards(html: str, source_url: str) -> list[dict]:
+    """
+    Given the HTML of a GitHub Trending page and its URL,
+    parse out each <article.Box-row> and return a list of dicts:
+      - source_url   (the trending page we came from)
+      - position     (1-based index on the page)
+      - slug         ("owner/repo")
+      - owner        ("owner")
+      - repo         ("repo")
+      - description  (text under the repo name)
+      - language     (primary programming language)
+      - stars        (total star count, int)
+      - stars_today  (e.g. "123 stars today")
+      - forks        (total fork count, int)
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+    cards = soup.select('article.Box-row')
+    results = []
+
+    for idx, card in enumerate(cards, start=1):
+        # e.g. href="/owner/repo"
+        href = card.h2.a['href'].lstrip('/')
+        owner, repo = href.split('/', 1)
+
+        # description
+        desc_el = card.select_one('p.col-9')
+        description = desc_el.text.strip() if desc_el else ''
+
+        # primary language
+        lang_el = card.select_one('[itemprop=programmingLanguage]')
+        language = lang_el.text.strip() if lang_el else ''
+
+        # total stars
+        star_el = card.select_one(f'a[href="/{href}/stargazers"]')
+        stars = 0
+        if star_el and star_el.text:
+            try:
+                stars = int(star_el.text.strip().replace(',', ''))
+            except ValueError:
+                stars = 0
+
+        # stars today / this period
+        stars_today_el = card.select_one('.float-sm-right')
+        stars_today = stars_today_el.text.strip() if stars_today_el else ''
+
+        # total forks
+        forks_el = card.select_one(f'a[href="/{href}/forks"]')
+        forks = 0
+        if forks_el and forks_el.text:
+            try:
+                forks = int(forks_el.text.strip().replace(',', ''))
+            except ValueError:
+                forks = 0
+
+        results.append({
+            "source_url":  source_url,
+            "position":    idx,
+            "slug":        href,
+            "owner":       owner,
+            "repo":        repo,
+            "description": description,
+            "language":    language,
+            "stars":       stars,
+            "stars_today": stars_today,
+            "forks":       forks,
+        })
+
+    return results
