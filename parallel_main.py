@@ -4,16 +4,16 @@ import os
 import logging
 import csv
 from mpi4py import MPI
-from scraper.core import scrape_trending, parse_trending_cards
+from scraper.core import scrape_trending, parse_trending_cards, scrape_repo_page, parse_repo_detail
 from scraper.metrics import Metrics
 from scraper.logger import setup
 from scraper.scheduler import load_checkpoint, save_checkpoint, merge_reports, save_report
 from scraper.urlgen import generate_trending_urls
 
 # filters:
-LANGUAGES = ['Python','JavaScript']
-PERIODS   = ['daily','weekly','monthly']
-SPOKEN_LANGUAGES = ['','en']
+LANGUAGES = ['Python', 'JavaScript']
+PERIODS = ['daily', 'weekly', 'monthly']
+SPOKEN_LANGUAGES = ['', 'en']
 
 # Paths
 CP_PATH = 'data/output/checkpoint.json'
@@ -36,8 +36,8 @@ def master(comm, size):
 
     # Fix: include 'stars_today' instead of 'stars_current'
     fieldnames = [
-        'source_url','position','slug','owner','repo',
-        'description','language','stars','stars_today','forks'
+        'source_url', 'position', 'slug', 'owner', 'repo', 'description', 'language', 'stars', 'stars_today', 'forks',
+        'license', 'open_issues', 'contributors_count', 'top_contributors'
     ]
 
     new_csv = not os.path.exists(OUT_CSV)
@@ -66,6 +66,7 @@ def master(comm, size):
             continue
 
         for record in cards:
+            record.pop('repo_url', None)
             writer.writerow(record)
         logger.info(f"[master] Added {len(cards)} rows for {url}")
         csv_file.flush()
@@ -101,8 +102,16 @@ def worker(comm):
         logger.info(f"[rank {rank}] Fetching {url}")
         try:
             with metrics.time_block():
-                html  = scrape_trending(url, max_retries=3, metrics=metrics)
+                # trending list
+                html = scrape_trending(url, max_retries=3, metrics=metrics)
                 cards = parse_trending_cards(html, source_url=url)
+                # detail-page pass
+                enriched = []
+                for c in cards:
+                    repo_html = scrape_repo_page(c["repo_url"], metrics=metrics)
+                    details = parse_repo_detail(repo_html, c["repo_url"])
+                    enriched.append({**c, **details})
+                cards = enriched
             metrics.incr('urls_success')
         except Exception as e:
             metrics.incr('urls_failed')

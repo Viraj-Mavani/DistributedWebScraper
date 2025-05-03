@@ -17,21 +17,24 @@ def generate_trending_urls(
 
     Always includes the global (all-languages) URL for each period.
     """
-    if periods   is None: periods   = ['daily','weekly','monthly']
-    if languages is None: languages = []  # no language filters
-    if spoken_languages is None: spoken_languages = ['']  # no spoken_languages filters
+    if periods          is None: periods          = ['daily','weekly','monthly']
+    if languages        is None: languages        = []
+    if spoken_languages is None: spoken_languages = ['']  # will still produce &spoken_language_code=
 
     urls: List[str] = []
+
     for period in periods:
-        for spoken_lang in spoken_languages:
-            # global Trending
-            spoken_lang_param = f'&spoken_language_code={spoken_lang}' if spoken_lang else ''
-            urls.append(f'https://github.com/trending?since={period}{spoken_lang_param}')
+        for spoken in spoken_languages:
+            # always include the spoken_language_code param
+            sl = f"&spoken_language_code={spoken}"
 
-            # per-language Trending
-            for lang in languages:
-                # quote e.g. "C#" → "c%23", "C++" → "c%2B%2B"
-                enc = urllib.parse.quote_plus(lang.lower())
-                urls.append(f'https://github.com/trending/{enc}?since={period}{spoken_lang_param}')
+            if not languages:
+                # GLOBAL trending
+                urls.append(f"https://github.com/trending?since={period}{sl}")
+            else:
+                # per-language only
+                for lang in languages:
+                    enc = urllib.parse.quote_plus(lang.lower())
+                    urls.append(f"https://github.com/trending/{enc}?since={period}{sl}")
+
     return urls
-

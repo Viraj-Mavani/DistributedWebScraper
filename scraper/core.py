@@ -1,17 +1,26 @@
 # scraper/core.py
-
+import random
 import time
+import cloudscraper
 import requests
 from bs4 import BeautifulSoup
+import logging
+
+# cloudscraper will handle any CF/UAM challenges
+_CS = cloudscraper.create_scraper()
+logger = logging.getLogger(__name__)
+
+# a slightly larger pool of real-world User-Agent headers
+DESKTOP_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/116.0.0.0 Safari/537.36"
+)
 
 def scrape_trending(url: str, max_retries: int = 3, metrics=None) -> str:
     """
     Fetch the raw HTML of a GitHub Trending page, with retry logic.
     Returns the page HTML as text.
-
-    :param url: the Trending page URL
-    :param max_retries: how many times to retry on failure
-    :param metrics: optional Metrics object to record retries
     """
     attempt = 0
     while True:
@@ -19,70 +28,54 @@ def scrape_trending(url: str, max_retries: int = 3, metrics=None) -> str:
             resp = requests.get(url, timeout=10)
             resp.raise_for_status()
             return resp.text
-        except Exception as e:
+        except Exception:
             attempt += 1
             if metrics:
-                metrics.incr('retries')
+                metrics.incr("retries")
             if attempt >= max_retries:
-                # let the caller handle/log the exception
                 raise
-            # small back-off before retrying
             time.sleep(1)
 
 
 def parse_trending_cards(html: str, source_url: str) -> list[dict]:
-    """
-    Given the HTML of a GitHub Trending page and its URL,
-    parse out each <article.Box-row> and return a list of dicts:
-      - source_url   (the trending page we came from)
-      - position     (1-based index on the page)
-      - slug         ("owner/repo")
-      - owner        ("owner")
-      - repo         ("repo")
-      - description  (text under the repo name)
-      - language     (primary programming language)
-      - stars        (total star count, int)
-      - stars_today  (e.g. "123 stars today")
-      - forks        (total fork count, int)
-    """
-    soup = BeautifulSoup(html, 'html.parser')
-    cards = soup.select('article.Box-row')
+    soup = BeautifulSoup(html, "html.parser")
+    cards = soup.select("article.Box-row")
     results = []
 
     for idx, card in enumerate(cards, start=1):
-        # e.g. href="/owner/repo"
-        href = card.h2.a['href'].lstrip('/')
-        owner, repo = href.split('/', 1)
+        href = card.h2.a["href"].lstrip("/")       # e.g. "owner/repo"
+        owner, repo = href.split("/", 1)
+        repo_url = f"https://github.com/{href}"
 
         # description
-        desc_el = card.select_one('p.col-9')
-        description = desc_el.text.strip() if desc_el else ''
+        desc_el = card.select_one("p.col-9")
+        description = desc_el.text.strip() if desc_el else ""
 
         # primary language
-        lang_el = card.select_one('[itemprop=programmingLanguage]')
-        language = lang_el.text.strip() if lang_el else ''
+        lang_el = card.select_one("[itemprop=programmingLanguage]")
+        language = lang_el.text.strip() if lang_el else ""
 
         # total stars
-        star_el = card.select_one(f'a[href="/{href}/stargazers"]')
         stars = 0
+        star_el = card.select_one(f'a[href="/{href}/stargazers"]')
         if star_el and star_el.text:
             try:
-                stars = int(star_el.text.strip().replace(',', ''))
+                stars = int(star_el.text.strip().replace(",", ""))
             except ValueError:
-                stars = 0
+                pass
 
-        # stars today / this period
-        stars_today_el = card.select_one('.float-sm-right')
-        stars_today = stars_today_el.text.strip() if stars_today_el else ''
+        # stars this period
+        stars_today_el = card.select_one(".float-sm-right")
+        stars_today = stars_today_el.text.strip() if stars_today_el else ""
 
-        # total forks
-        forks_el = card.select_one(f'a[href="/{href}/forks"]')
+        # forks
         forks = 0
+        forks_el = card.select_one(f'a[href="/{href}/forks"]')
         if forks_el and forks_el.text:
             try:
-                forks = int(forks_el.text.strip().replace(',', ''))
+                forks = int(forks_el.text.strip().replace(",", ""))
             except ValueError:
-                forks = 0
+                pass
 
         results.append({
             "source_url":  source_url,
@@ -90,6 +83,7 @@ def parse_trending_cards(html: str, source_url: str) -> list[dict]:
             "slug":        href,
             "owner":       owner,
             "repo":        repo,
+            "repo_url":    repo_url,
             "description": description,
             "language":    language,
             "stars":       stars,
@@ -98,3 +92,95 @@ def parse_trending_cards(html: str, source_url: str) -> list[dict]:
         })
 
     return results
+
+
+def scrape_repo_page(repo_url: str, max_retries: int = 3, metrics=None) -> str:
+    attempt = 0
+    while True:
+        try:
+            headers = {
+                "User-Agent": DESKTOP_UA,
+                "Accept-Language": "en-US,en;q=0.9",
+                "Referer": "https://github.com/",
+            }
+            time.sleep(random.uniform(0.5, 1.5))
+            resp = _CS.get(repo_url, headers=headers, timeout=10)
+            resp.raise_for_status()
+            return resp.text
+        except Exception:
+            attempt += 1
+            if metrics:
+                metrics.incr("retries")
+            if attempt >= max_retries:
+                raise
+            time.sleep(1)
+
+
+def parse_repo_detail(html: str, repo_url: str, metrics=None) -> dict:
+    soup = BeautifulSoup(html, "html.parser")
+
+    # --- license ---
+    license_name = ""
+    lic_el = soup.select_one('a[title*="License"], a[href$="/LICENSE"], a[href*="/blob/master/LICENSE"]')
+    if lic_el:
+        license_name = lic_el.get_text(strip=True)
+
+    # --- open issues ---
+    open_issues = 0
+    issues_el = soup.select_one('a[href$="/issues"] .Counter')
+    if issues_el:
+        raw = issues_el.get("title", issues_el.get_text(strip=True))
+        try:
+            open_issues = int(raw.replace(",", ""))
+        except ValueError:
+            if metrics:
+                metrics.incr("parse_errors")
+            logger.warning(f"[parse] could not parse open_issues ({raw!r}) on {repo_url}")
+
+    # --- contributors count & list ---
+    contributors_count = 0
+    contrib_link = soup.select_one('a[href$="/graphs/contributors"].Link--primary')
+    if contrib_link:
+        counter_el = contrib_link.select_one(".Counter")
+        raw = (counter_el.get("title") or counter_el.get_text(strip=True)).strip()
+        try:
+            contributors_count = int(raw.lstrip("+").replace(",", ""))
+        except ValueError:
+            if metrics:
+                metrics.incr("parse_errors")
+            logger.warning(f"[parse] could not parse contributors_count on {repo_url}")
+
+    # --- top contributors usernames (from the avatar list) ---
+    top_contributors = []
+    if contributors_count > 0:
+        # 1) find the exact “Contributors” sidebar cell
+        contrib_cell = None
+        for div in soup.select("div.BorderGrid-cell"):
+            if div.select_one('a[href$="/graphs/contributors"].Link--primary'):
+                contrib_cell = div
+                break
+
+        if contrib_cell:
+            # 2) within that cell, look for the avatars-list UL
+            avatar_list = contrib_cell.select_one("ul.list-style-none.d-flex.flex-wrap.mb-n2")
+            if avatar_list:
+                items = avatar_list.select("li a")
+                # logger.info(f"[parse] found {len(items)} top contributors for {repo_url}")
+                if items:
+                    for a in items:
+                        href = a.get("href", "")
+                        if href:
+                            top_contributors.append(href.rstrip("/").split("/")[-1])
+
+        else:
+            logger.warning(f"[parse] could not locate Contributors cell on {repo_url}")
+
+    logger.info(f"[parse] {repo_url} - Done")
+
+
+    return {
+        "license":            license_name,
+        "open_issues":        open_issues,
+        "contributors_count": contributors_count,
+        "top_contributors":   top_contributors,
+    }
