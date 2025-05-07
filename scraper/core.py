@@ -19,13 +19,20 @@ DESKTOP_UA = (
 
 def scrape_trending(url: str, max_retries: int = 3, metrics=None) -> str:
     """
-    Fetch the raw HTML of a GitHub Trending page, with retry logic.
+    Fetch the raw HTML of a GitHub Trending page via cloudscraper (so CF/UAM
+    challenges are handled), with retry logic and a small random delay.
     Returns the page HTML as text.
     """
     attempt = 0
     while True:
         try:
-            resp = requests.get(url, timeout=10)
+            headers = {
+                "User-Agent": DESKTOP_UA,
+                "Accept-Language": "en-US,en;q=0.9",
+                "Referer": "https://github.com/",
+            }
+            time.sleep(random.uniform(0.5, 1))
+            resp = _CS.get(url, headers=headers, timeout=10)
             resp.raise_for_status()
             return resp.text
         except Exception:
