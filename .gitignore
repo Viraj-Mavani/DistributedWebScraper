@@ -1,5 +1,4 @@
 /Image/
-/data/output/log.txt!/demo_parallel.py
 demo_parallel.py
 demo_serial.py
 hello_mpi.py
