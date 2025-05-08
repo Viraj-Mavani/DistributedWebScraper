@@ -1,45 +1,55 @@
 # scraper/core.py
+
+import os
 import random
 import time
+import yaml
 import cloudscraper
-import requests
 from bs4 import BeautifulSoup
 import logging
+
+_CFG_PATH = os.path.join(os.path.dirname(__file__), os.pardir, "config.yaml")
+with open(_CFG_PATH, "r") as _f:
+    _CFG = yaml.safe_load(_f)
+
+# pull scraper settings
+_TIMEOUT         = _CFG["scraper"]["timeout"]
+_MAX_RETRIES     = _CFG["scraper"]["max_retries"]
+_USER_AGENT      = _CFG["scraper"]["user_agent"].strip()
+_ACCEPT_LANGUAGE = _CFG["scraper"]["accept_language"].strip()
+_REFERER         = _CFG["scraper"]["referer"].strip()
+_SLEEP_MIN       = _CFG["scraper"]["sleep_between_requests"]["min"]
+_SLEEP_MAX       = _CFG["scraper"]["sleep_between_requests"]["max"]
 
 # cloudscraper will handle any CF/UAM challenges
 _CS = cloudscraper.create_scraper()
 logger = logging.getLogger(__name__)
 
-# a slightly larger pool of real-world User-Agent headers
-DESKTOP_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/116.0.0.0 Safari/537.36"
-)
-
-def scrape_trending(url: str, max_retries: int = 3, metrics=None) -> str:
+def scrape_trending(url: str, max_retries: int = None, metrics=None) -> str:
     """
     Fetch the raw HTML of a GitHub Trending page via cloudscraper (so CF/UAM
     challenges are handled), with retry logic and a small random delay.
-    Returns the page HTML as text.
     """
     attempt = 0
+    retries = max_retries if max_retries is not None else _MAX_RETRIES
+
     while True:
         try:
             headers = {
-                "User-Agent": DESKTOP_UA,
-                "Accept-Language": "en-US,en;q=0.9",
-                "Referer": "https://github.com/",
+                "User-Agent":      _USER_AGENT,
+                "Accept-Language": _ACCEPT_LANGUAGE,
+                "Referer":         _REFERER,
             }
-            time.sleep(random.uniform(0.5, 1))
-            resp = _CS.get(url, headers=headers, timeout=10)
+            time.sleep(random.uniform(_SLEEP_MIN, _SLEEP_MAX))
+            resp = _CS.get(url, headers=headers, timeout=_TIMEOUT)
             resp.raise_for_status()
             return resp.text
+
         except Exception:
             attempt += 1
             if metrics:
                 metrics.incr("retries")
-            if attempt >= max_retries:
+            if attempt >= retries:
                 raise
             time.sleep(1)
 
@@ -101,24 +111,29 @@ def parse_trending_cards(html: str, source_url: str) -> list[dict]:
     return results
 
 
-def scrape_repo_page(repo_url: str, max_retries: int = 3, metrics=None) -> str:
+def scrape_repo_page(repo_url: str, max_retries: int = None, metrics=None) -> str:
+    """
+    Fetch a repo’s main page (uses the same headers + a small random pause).
+    """
     attempt = 0
+    retries = max_retries if max_retries is not None else _MAX_RETRIES
+
     while True:
         try:
             headers = {
-                "User-Agent": DESKTOP_UA,
-                "Accept-Language": "en-US,en;q=0.9",
-                "Referer": "https://github.com/",
+                "User-Agent":      _USER_AGENT,
+                "Accept-Language": _ACCEPT_LANGUAGE,
+                "Referer":         _REFERER,
             }
-            time.sleep(random.uniform(0.5, 1.5))
-            resp = _CS.get(repo_url, headers=headers, timeout=10)
+            time.sleep(random.uniform(_SLEEP_MIN, _SLEEP_MAX))
+            resp = _CS.get(repo_url, headers=headers, timeout=_TIMEOUT)
             resp.raise_for_status()
             return resp.text
         except Exception:
             attempt += 1
             if metrics:
                 metrics.incr("retries")
-            if attempt >= max_retries:
+            if attempt >= retries:
                 raise
             time.sleep(1)
 
@@ -157,10 +172,10 @@ def parse_repo_detail(html: str, repo_url: str, metrics=None) -> dict:
                 metrics.incr("parse_errors")
             logger.warning(f"[parse] could not parse contributors_count on {repo_url}")
 
-    # --- top contributors usernames (from the avatar list) ---
+    # --- top contributors usernames ---
     top_contributors = []
     if contributors_count > 0:
-        # 1) find the exact “Contributors” sidebar cell
+        # locate the exact “Contributors” sidebar cell
         contrib_cell = None
         for div in soup.select("div.BorderGrid-cell"):
             if div.select_one('a[href$="/graphs/contributors"].Link--primary'):
@@ -168,7 +183,6 @@ def parse_repo_detail(html: str, repo_url: str, metrics=None) -> dict:
                 break
 
         if contrib_cell:
-            # 2) within that cell, look for the avatars-list UL
             avatar_list = contrib_cell.select_one("ul.list-style-none.d-flex.flex-wrap.mb-n2")
             if avatar_list:
                 items = avatar_list.select("li a")
@@ -183,8 +197,6 @@ def parse_repo_detail(html: str, repo_url: str, metrics=None) -> dict:
             logger.warning(f"[parse] could not locate Contributors cell on {repo_url}")
 
     logger.info(f"[parse] {repo_url} - Done")
-
-
     return {
         "license":            license_name,
         "open_issues":        open_issues,

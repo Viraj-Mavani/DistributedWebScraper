@@ -1,0 +1,28 @@
+# config.yaml
+
+logging:
+  level: INFO
+
+scraper:
+  max_retries: 3
+  timeout: 10              # seconds
+  user_agent: >
+    Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+    AppleWebKit/537.36 (KHTML, like Gecko)
+    Chrome/116.0.0.0 Safari/537.36
+  accept_language: "en-US,en;q=0.9"
+  referer: "https://github.com/"
+  sleep_between_requests:
+    min: 0.5
+    max: 1.0
+
+trending:
+  languages: ["Python"]    # e.g. ["Python","JavaScript","C","Java"]
+  periods:   ["daily","weekly","monthly"]
+  spoken_languages: ["", "en"]
+
+paths:
+  checkpoint:   "data/output/checkpoint.json"
+  serial_csv:   "data/output/trending_serial.csv"
+  parallel_csv: "data/output/trending_parallel.csv"
+  metrics_dir:  "metrics"
