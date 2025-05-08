@@ -17,13 +17,6 @@
             </Attribute>
           </value>
         </entry>
-        <entry key="\trending.csv">
-          <value>
-            <Attribute>
-              <option name="separator" value="," />
-            </Attribute>
-          </value>
-        </entry>
         <entry key="\trending_parallel_demo.csv">
           <value>
             <Attribute>

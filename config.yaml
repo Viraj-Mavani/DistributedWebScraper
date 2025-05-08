@@ -17,9 +17,9 @@ scraper:
     max: 1.0
 
 trending:
-  languages: ["Python"]                   # e.g. ["Python","JavaScript","C","Java"]
-  periods:   ["daily","weekly","monthly"] # e.g. ["daily","weekly","monthly"]
-  spoken_languages: ["", "en"]            # e.g. ["", "en"]
+  languages: ["Python","JavaScript","C","Java","c%23"]    # e.g. ["Python","JavaScript","C","Java","c%23"]
+  periods:   ["daily","weekly","monthly"]                 # e.g. ["daily","weekly","monthly"]
+  spoken_languages: ["","en","zh"]                        # e.g. ["","en","zh"]
 
 paths:
   checkpoint:   "data/output/checkpoint.json"
