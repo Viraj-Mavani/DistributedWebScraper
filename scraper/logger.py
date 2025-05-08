@@ -1,5 +1,6 @@
-import logging
+# scraper/logger.py
 
+import logging
 
 def setup(verbose: bool = False) -> logging.Logger:
     """

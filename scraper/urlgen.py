@@ -3,10 +3,11 @@
 import urllib.parse
 from typing import List
 
+
 def generate_trending_urls(
-    languages: List[str] = None,
-    periods:   List[str] = None,
-    spoken_languages:   List[str] = None
+        languages: List[str] = None,
+        periods: List[str] = None,
+        spoken_languages: List[str] = None
 ) -> List[str]:
     """
     Build GitHub Trending URLs for the given languages and time windows.
@@ -14,18 +15,15 @@ def generate_trending_urls(
     - languages: e.g. ['Python','JavaScript','Java','C','Go','c%23'] (case-insensitive)
     - periods:   e.g. ['daily','weekly','monthly']
     - spoken_languages:   e.g. ['','en']
-
-    Always includes the global (all-languages) URL for each period.
     """
-    if periods          is None: periods          = ['daily','weekly','monthly']
-    if languages        is None: languages        = []
-    if spoken_languages is None: spoken_languages = ['']  # will still produce &spoken_language_code=
+    if periods is None: periods = ['daily']
+    if languages is None: languages = []
+    if spoken_languages is None: spoken_languages = ['']  # will produce &spoken_language_code=
 
     urls: List[str] = []
 
     for period in periods:
         for spoken in spoken_languages:
-            # always include the spoken_language_code param
             sl = f"&spoken_language_code={spoken}"
 
             if not languages:

@@ -1,9 +1,9 @@
 # parallel_main.py
 
-import yaml
 import os
-import logging
 import csv
+import yaml
+import logging
 from mpi4py import MPI
 from scraper.core import scrape_trending, parse_trending_cards, scrape_repo_page, parse_repo_detail
 from scraper.metrics import Metrics
@@ -17,18 +17,19 @@ with open(_CFG_PATH, "r") as _f:
 logging.basicConfig(level=getattr(logging, _CFG["logging"]["level"]))
 
 # filters:
-_LANGUAGES        = _CFG["trending"]["languages"]
-_PERIODS          = _CFG["trending"]["periods"]
+_LANGUAGES = _CFG["trending"]["languages"]
+_PERIODS = _CFG["trending"]["periods"]
 _SPOKEN_LANGUAGES = _CFG["trending"]["spoken_languages"]
 
 # Paths
-_CP_PATH      = _CFG["paths"]["checkpoint"]
-_OUT_CSV      = _CFG["paths"]["parallel_csv"]
+_CP_PATH = _CFG["paths"]["checkpoint"]
+_OUT_CSV = _CFG["paths"]["parallel_csv"]
 _METRICS_JSON = os.path.join(_CFG["paths"]["metrics_dir"], "parallel_metrics.json")
 
-_MAX_RETRIES  = _CFG["scraper"]["max_retries"]
+_MAX_RETRIES = _CFG["scraper"]["max_retries"]
 
 _ALL_URLS = generate_trending_urls(_LANGUAGES, _PERIODS, _SPOKEN_LANGUAGES)
+
 
 def master(comm, size):
     logger = setup(verbose=False)
@@ -44,7 +45,6 @@ def master(comm, size):
         logger.info("[master] Fresh run detected: deleting existing CSV.")
         os.remove(_OUT_CSV)
 
-    # Fix: include 'stars_today' instead of 'stars_current'
     fieldnames = [
         'source_url', 'position', 'slug', 'owner', 'repo', 'description', 'language', 'stars', 'stars_today', 'forks',
         'license', 'open_issues', 'contributors_count', 'top_contributors'
@@ -121,10 +121,10 @@ def worker(comm):
         logger.info(f"[rank {rank}] Fetching {url}")
         try:
             with metrics.time_block():
-                # trending list
-                html  = scrape_trending(url, max_retries=_MAX_RETRIES, metrics=metrics)
+                # 1) trending list
+                html = scrape_trending(url, max_retries=_MAX_RETRIES, metrics=metrics)
                 cards = parse_trending_cards(html, source_url=url)
-                # detail-page pass
+                # 2) detail-page pass
                 enriched = []
                 for c in cards:
                     repo_html = scrape_repo_page(c["repo_url"], metrics=metrics)

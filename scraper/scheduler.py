@@ -1,3 +1,5 @@
+# scraper/scheduler.py
+
 import json
 import os
 import hashlib
@@ -52,14 +54,12 @@ def load_checkpoint(all_urls, meta_path):
 
     # decide reset if URLs changed or fully done
     if meta.get("url_list_hash") != url_hash or set(meta.get("completed", [])) == set(all_urls):
-        # reset
         meta = {
             "url_list_hash": url_hash,
             "all_urls": list(all_urls),
             "completed": []
         }
 
-    # pending = those in all_urls not yet in completed
     done_set = set(meta["completed"])
     pending = [u for u in all_urls if u not in done_set]
     return meta, pending

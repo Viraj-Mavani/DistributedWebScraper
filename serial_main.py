@@ -1,9 +1,9 @@
 # serial_main.py
 
+import os
+import csv
 import yaml
 import logging
-import csv
-import os
 from scraper.core import scrape_trending, parse_trending_cards, scrape_repo_page, parse_repo_detail
 from scraper.metrics import Metrics
 from scraper.logger import setup
@@ -16,18 +16,19 @@ with open(_CFG_PATH, "r") as _f:
 logging.basicConfig(level=getattr(logging, _CFG["logging"]["level"]))
 
 # filters:
-_LANGUAGES        = _CFG["trending"]["languages"]
-_PERIODS          = _CFG["trending"]["periods"]
+_LANGUAGES = _CFG["trending"]["languages"]
+_PERIODS = _CFG["trending"]["periods"]
 _SPOKEN_LANGUAGES = _CFG["trending"]["spoken_languages"]
 
 # Paths
-_CP_PATH        = _CFG["paths"]["checkpoint"]
-_OUT_CSV        = _CFG["paths"]["serial_csv"]
-_METRICS_JSON   = os.path.join(_CFG["paths"]["metrics_dir"], "serial_metrics.json")
+_CP_PATH = _CFG["paths"]["checkpoint"]
+_OUT_CSV = _CFG["paths"]["serial_csv"]
+_METRICS_JSON = os.path.join(_CFG["paths"]["metrics_dir"], "serial_metrics.json")
 
-_MAX_RETRIES  = _CFG["scraper"]["max_retries"]
+_MAX_RETRIES = _CFG["scraper"]["max_retries"]
 
 _ALL_URLS = generate_trending_urls(_LANGUAGES, _PERIODS, _SPOKEN_LANGUAGES)
+
 
 def main():
     logger = setup(verbose=False)
@@ -46,7 +47,7 @@ def main():
         return
 
     if len(pending) == total and os.path.exists(_OUT_CSV):
-        logger.info("Fresh run detected—deleting existing CSV.")
+        logger.info("Fresh run detected: deleting existing CSV.")
         os.remove(_OUT_CSV)
 
     fieldnames = [
@@ -67,7 +68,7 @@ def main():
         try:
             with metrics.time_block():
                 # 1) get trending list
-                html  = scrape_trending(url, max_retries=_MAX_RETRIES, metrics=metrics)
+                html = scrape_trending(url, max_retries=_MAX_RETRIES, metrics=metrics)
                 cards = parse_trending_cards(html, source_url=url)
 
                 # 2) for each card, fan out to the repo page
