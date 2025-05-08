@@ -21,8 +21,8 @@ _PERIODS          = _CFG["trending"]["periods"]
 _SPOKEN_LANGUAGES = _CFG["trending"]["spoken_languages"]
 
 # Paths
-_CP_PATH    = _CFG["paths"]["checkpoint"]
-_OUT_CSV    = _CFG["paths"]["serial_csv"]
+_CP_PATH        = _CFG["paths"]["checkpoint"]
+_OUT_CSV        = _CFG["paths"]["serial_csv"]
 _METRICS_JSON   = os.path.join(_CFG["paths"]["metrics_dir"], "serial_metrics.json")
 
 _MAX_RETRIES  = _CFG["scraper"]["max_retries"]
@@ -96,9 +96,47 @@ def main():
 
     csv_file.close()
 
+    duplicates_removed = dedupe_and_sort_csv(_OUT_CSV, sort_by=["source_url"], dedupe_on="slug")
+
+    report = metrics.report()
+    report["duplicates_removed"] = duplicates_removed
+
     save_report(metrics.report(), _METRICS_JSON)
     logger.info("Serial run metrics saved.")
-    logger.info(f"Metrics: {metrics.report()}")
+    logger.info(f"Metrics: {report}")
+
+
+def dedupe_and_sort_csv(path: str, *, sort_by: list[str], dedupe_on: str = "slug") -> int:
+    """
+    Reads `path`, drops any rows whose `dedupe_on` field we've already seen,
+    sorts the survivors by `sort_by`, writes them back, and returns how many
+    duplicates were removed.
+    """
+    seen = set()
+    unique_rows = []
+    duplicates = 0
+
+    # read & filter
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            key = row[dedupe_on]
+            if key in seen:
+                duplicates += 1
+                continue
+            seen.add(key)
+            unique_rows.append(row)
+
+    # sort
+    unique_rows.sort(key=lambda r: tuple(r[col] for col in sort_by))
+
+    # write back
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=reader.fieldnames)
+        writer.writeheader()
+        writer.writerows(unique_rows)
+
+    return duplicates
 
 
 if __name__ == '__main__':

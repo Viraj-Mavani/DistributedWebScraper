@@ -22,7 +22,7 @@ _PERIODS          = _CFG["trending"]["periods"]
 _SPOKEN_LANGUAGES = _CFG["trending"]["spoken_languages"]
 
 # Paths
-_CP_PATH     = _CFG["paths"]["checkpoint"]
+_CP_PATH      = _CFG["paths"]["checkpoint"]
 _OUT_CSV      = _CFG["paths"]["parallel_csv"]
 _METRICS_JSON = os.path.join(_CFG["paths"]["metrics_dir"], "parallel_metrics.json")
 
@@ -95,9 +95,13 @@ def master(comm, size):
 
     csv_file.close()
 
-    # merge worker reports
+    duplicates_removed = dedupe_and_sort_csv(_OUT_CSV, sort_by=["source_url"], dedupe_on="slug")
+
+    # merge metrics and inject duplicates_removed
     combined = merge_reports(all_reports)
-    combined['mpi_time_s'] = MPI.Wtime() - t0
+    combined["duplicates_removed"] = duplicates_removed
+    combined["mpi_time_s"] = MPI.Wtime() - t0
+
     save_report(combined, _METRICS_JSON)
     logger.info(f"[master] Complete in {combined['mpi_time_s']:.2f}s; metrics saved.")
     logger.info(f"Combined Metrics: {combined}")
@@ -153,6 +157,39 @@ def main():
         master(comm, size)
     else:
         worker(comm)
+
+
+def dedupe_and_sort_csv(path: str, *, sort_by: list[str], dedupe_on: str = "slug") -> int:
+    """
+    Reads `path`, drops any rows whose `dedupe_on` field we've already seen,
+    sorts the survivors by `sort_by`, writes them back, and returns how many
+    duplicates were removed.
+    """
+    seen = set()
+    unique_rows = []
+    duplicates = 0
+
+    # read & filter
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            key = row[dedupe_on]
+            if key in seen:
+                duplicates += 1
+                continue
+            seen.add(key)
+            unique_rows.append(row)
+
+    # sort
+    unique_rows.sort(key=lambda r: tuple(r[col] for col in sort_by))
+
+    # write back
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=reader.fieldnames)
+        writer.writeheader()
+        writer.writerows(unique_rows)
+
+    return duplicates
 
 
 if __name__ == '__main__':

@@ -15,6 +15,7 @@ class Metrics:
             'urls_failed':  0,
             'parse_errors': 0,
             'retries':      0,
+            'duplicates_removed': 0,
         }
         # List of per-URL durations
         self.timings = []
