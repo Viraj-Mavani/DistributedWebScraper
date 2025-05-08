@@ -1,8 +1,0 @@
-from mpi4py import MPI
-
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
-print(f"[Hello]  I am rank {rank} of {size}")
-
-# mpiexec -n 4 python hello_mpi.py
