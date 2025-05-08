@@ -1,0 +1,4 @@
+cloudscraper
+beautifulsoup4
+pyyaml
+mpi4py
